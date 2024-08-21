@@ -1,7 +1,6 @@
-// backend/src/index.js
 const express = require('express');
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.get('/api/products', (req, res) => {
   res.json([
@@ -11,6 +10,5 @@ app.get('/api/products', (req, res) => {
   ]);
 });
 
-app.listen(port, () => {
-  console.log(`Backend app listening at http://localhost:${port}`);
-});
+// Export the app without starting the server
+module.exports = app;
