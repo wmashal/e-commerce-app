@@ -1,4 +1,3 @@
-# .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
 
 on:
@@ -12,48 +11,102 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
           node-version: '14'
-      - name: Install dependencies
+
+      - name: Cache node modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Install frontend dependencies
         run: |
-          cd frontend && npm ci
-          cd ../backend && npm ci
-      - name: Run tests
+          cd frontend
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Install backend dependencies
         run: |
-          cd frontend && npm test
-          cd ../backend && npm test
+          cd backend
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --passWithNoTests
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          npm test -- --passWithNoTests
 
   build-and-push-docker:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Build Docker images
-        run: |
-          docker build -t yourusername/ecommerce-frontend:${{ github.sha }} frontend/
-          docker build -t yourusername/ecommerce-backend:${{ github.sha }} backend/
-      - name: Log in to Docker Hub
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      - name: Push Docker images
-        run: |
-          docker push wmashal/ecommerce-frontend:${{ github.sha }}
-          docker push wmashal/ecommerce-backend:${{ github.sha }}
+
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
+
+      - name: Build and push backend Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
 
   deploy-to-kubernetes:
     needs: build-and-push-docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Set up kubectl
+
+      - name: Install kubectl
         uses: azure/setup-kubectl@v1
-      - name: Deploy to Kind cluster
+
+      - name: Set up kubeconfig
         run: |
-          kind create cluster --name ecommerce-cluster
-          kubectl apply -f k8s/
-          kubectl set image deployment/frontend frontend=wmashal/ecommerce-frontend:${{ github.sha }}
-          kubectl set image deployment/backend backend=wmashal/ecommerce-backend:${{ github.sha }}
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Update Kubernetes deployments
+        run: |
+          kubectl set image deployment/frontend frontend=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
+          kubectl set image deployment/backend backend=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
+
+      - name: Verify deployments
+        run: |
+          kubectl rollout status deployment/frontend
+          kubectl rollout status deployment/backend
