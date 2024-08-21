@@ -1,0 +1,59 @@
+# .github/workflows/ci-cd.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Install dependencies
+        run: |
+          cd frontend && npm ci
+          cd ../backend && npm ci
+      - name: Run tests
+        run: |
+          cd frontend && npm test
+          cd ../backend && npm test
+
+  build-and-push-docker:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Docker images
+        run: |
+          docker build -t yourusername/ecommerce-frontend:${{ github.sha }} frontend/
+          docker build -t yourusername/ecommerce-backend:${{ github.sha }} backend/
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      - name: Push Docker images
+        run: |
+          docker push wmashal/ecommerce-frontend:${{ github.sha }}
+          docker push wmashal/ecommerce-backend:${{ github.sha }}
+
+  deploy-to-kubernetes:
+    needs: build-and-push-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v1
+      - name: Deploy to Kind cluster
+        run: |
+          kind create cluster --name ecommerce-cluster
+          kubectl apply -f k8s/
+          kubectl set image deployment/frontend frontend=wmashal/ecommerce-frontend:${{ github.sha }}
+          kubectl set image deployment/backend backend=wmashal/ecommerce-backend:${{ github.sha }}
