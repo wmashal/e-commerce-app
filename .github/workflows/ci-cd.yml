@@ -10,83 +10,85 @@ jobs:
   build-and-test:
     runs-on: self-hosted
     steps:
-      - name: Debug Runner Environment
-        run: |
-          echo "Current working directory: $(pwd)"
-          echo "Contents of current directory:"
+    - name: Debug Environment Variables
+      run: |
+        echo "NODE_OPTIONS: $NODE_OPTIONS"
+        echo "Path: $PATH"
+        echo "All environment variables:"
+        env
+
+    - uses: actions/checkout@v2
+
+    - name: Debug After Checkout
+      run: |
+        echo "Current working directory after checkout: $(pwd)"
+        echo "Contents of current directory after checkout:"
+        ls -la
+        echo "Contents of _work directory:"
+        ls -la $RUNNER_WORKSPACE
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'
+
+    - name: Verify Node.js Setup
+      run: |
+        echo "Node version: $(node -v)"
+        echo "NPM version: $(npm -v)"
+        echo "Which node: $(which node)"
+        echo "Which npm: $(which npm)"
+
+    - name: Clear NODE_OPTIONS
+      run: unset NODE_OPTIONS
+
+    - name: Cache node modules
+      uses: actions/cache@v2
+      env:
+        cache-name: cache-node-modules
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-npm-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-npm-
+
+    - name: Install frontend dependencies
+      run: |
+        if [ -d "frontend" ]; then
+          cd frontend
+          npm ci || npm install
+        else
+          echo "Frontend directory not found"
           ls -la
-          echo "Contents of parent directory:"
-          ls -la ..
-          echo "GitHub Workspace: $GITHUB_WORKSPACE"
-          echo "Runner Workspace: $RUNNER_WORKSPACE"
+        fi
 
-      - uses: actions/checkout@v2
-
-      - name: Debug After Checkout
-        run: |
-          echo "Current working directory after checkout: $(pwd)"
-          echo "Contents of current directory after checkout:"
+    - name: Install backend dependencies
+      run: |
+        if [ -d "backend" ]; then
+          cd backend
+          npm ci || npm install
+        else
+          echo "Backend directory not found"
           ls -la
-          echo "Contents of _work directory:"
-          ls -la $RUNNER_WORKSPACE
+        fi
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16'
+    - name: Run frontend tests
+      run: |
+        if [ -d "frontend" ]; then
+          cd frontend
+          npm test -- --passWithNoTests
+        else
+          echo "Frontend directory not found"
+        fi
 
-      - name: Verify Node.js Setup
-        run: |
-          echo "Node version: $(node -v)"
-          echo "NPM version: $(npm -v)"
-
-      - name: Cache node modules
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
-      - name: Install frontend dependencies
-        run: |
-          if [ -d "frontend" ]; then
-            cd frontend
-            npm ci || npm install
-          else
-            echo "Frontend directory not found"
-            ls -la
-          fi
-
-      - name: Install backend dependencies
-        run: |
-          if [ -d "backend" ]; then
-            cd backend
-            npm ci || npm install
-          else
-            echo "Backend directory not found"
-            ls -la
-          fi
-
-      - name: Run frontend tests
-        run: |
-          if [ -d "frontend" ]; then
-            cd frontend
-            npm test -- --passWithNoTests
-          else
-            echo "Frontend directory not found"
-          fi
-
-      - name: Run backend tests
-        run: |
-          if [ -d "backend" ]; then
-            cd backend
-            npm test
-          else
-            echo "Backend directory not found"
-          fi
+    - name: Run backend tests
+      run: |
+        if [ -d "backend" ]; then
+          cd backend
+          npm test
+        else
+          echo "Backend directory not found"
+        fi
 
   build-and-push-docker:
     needs: build-and-test
