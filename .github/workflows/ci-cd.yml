@@ -10,13 +10,25 @@ jobs:
   build-and-test:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v2
-      - name: Debug Information
+      - name: Debug Runner Environment
         run: |
-          pwd
-          ls -R
-          echo "Current Node version: $(node -v)"
-          echo "Current NPM version: $(npm -v)"
+          echo "Current working directory: $(pwd)"
+          echo "Contents of current directory:"
+          ls -la
+          echo "Contents of parent directory:"
+          ls -la ..
+          echo "GitHub Workspace: $GITHUB_WORKSPACE"
+          echo "Runner Workspace: $RUNNER_WORKSPACE"
+
+      - uses: actions/checkout@v2
+
+      - name: Debug After Checkout
+        run: |
+          echo "Current working directory after checkout: $(pwd)"
+          echo "Contents of current directory after checkout:"
+          ls -la
+          echo "Contents of _work directory:"
+          ls -la $RUNNER_WORKSPACE
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
@@ -25,8 +37,8 @@ jobs:
 
       - name: Verify Node.js Setup
         run: |
-          echo "Node version after setup: $(node -v)"
-          echo "NPM version after setup: $(npm -v)"
+          echo "Node version: $(node -v)"
+          echo "NPM version: $(npm -v)"
 
       - name: Cache node modules
         uses: actions/cache@v2
@@ -34,7 +46,7 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package.json') }}
+          key: ${{ runner.os }}-npm-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
