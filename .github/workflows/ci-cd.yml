@@ -54,41 +54,31 @@ jobs:
 
     - name: Install frontend dependencies
       run: |
-        if [ -d "frontend" ]; then
-          cd frontend
-          npm ci || npm install
+        cd frontend
+        if [ -f package-lock.json ]; then
+          npm ci
         else
-          echo "Frontend directory not found"
-          ls -la
+          npm install
         fi
 
     - name: Install backend dependencies
       run: |
-        if [ -d "backend" ]; then
-          cd backend
-          npm ci || npm install
+        cd backend
+        if [ -f package-lock.json ]; then
+          npm ci
         else
-          echo "Backend directory not found"
-          ls -la
+          npm install
         fi
 
     - name: Run frontend tests
       run: |
-        if [ -d "frontend" ]; then
-          cd frontend
-          npm test -- --passWithNoTests
-        else
-          echo "Frontend directory not found"
-        fi
+        cd frontend
+        npm test -- --passWithNoTests
 
     - name: Run backend tests
       run: |
-        if [ -d "backend" ]; then
-          cd backend
-          npm test
-        else
-          echo "Backend directory not found"
-        fi
+        cd backend
+        npm test
 
   build-and-push-docker:
     needs: build-and-test
