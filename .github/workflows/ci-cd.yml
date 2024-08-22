@@ -9,12 +9,6 @@ on:
 jobs:
   build-and-test:
     runs-on: self-hosted
-#    runs-on: ubuntu-latest
-    services:
-      ssh:
-        image: rastasheep/ubuntu-sshd:18.04
-        ports:
-          - 22
     steps:
       - uses: actions/checkout@v2
 
@@ -65,7 +59,6 @@ jobs:
 
   build-and-push-docker:
     needs: build-and-test
-#    runs-on: self-hosted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -95,59 +88,29 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
 
-  build-and-deploy:
-    needs: build-and-test
+  deploy-and-test:
+    needs: build-and-push-docker
     runs-on: self-hosted
-#    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+      - name: Install kubectl
+        run: |
+          brew install kubectl
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Build and push frontend Docker image
-        uses: docker/build-push-action@v2
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
-
-      - name: Build and push backend Docker image
-        uses: docker/build-push-action@v2
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
+      - name: Install Kind
+        run: |
+          brew install kind
 
       - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.2.0
-
-#      - name: Deploy to Kind Cluster
-#        run: |
-#          kubectl create deployment frontend --image=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
-#          kubectl create deployment backend --image=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
-#          kubectl expose deployment frontend --type=NodePort --port=3000
-#          kubectl expose deployment backend --type=NodePort --port=3000
-#          kubectl get pods
-#          kubectl get services
-
-#      - name: Wait for deployments
-#        run: |
-#          kubectl wait --for=condition=available --timeout=600s deployment/frontend
-#          kubectl wait --for=condition=available --timeout=600s deployment/backend
-
+        run: |
+          kind create cluster --name test-cluster
 
       - name: Deploy to Kind Cluster
         run: |
           # Update image tags in deployment files
-          sed -i 's|image: .*frontend:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}|' k8s/*frontend*.yaml
-          sed -i 's|image: .*backend:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}|' k8s/*backend*.yaml
+          sed -i '' 's|image: .*frontend:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}|' k8s/*frontend*.yaml
+          sed -i '' 's|image: .*backend:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}|' k8s/*backend*.yaml
           
           # Apply all kubernetes manifests
           kubectl apply -f k8s/
@@ -158,7 +121,6 @@ jobs:
           # Display status
           kubectl get pods
           kubectl get services
-
 
       - name: Port forward services (for demonstration)
         run: |
@@ -181,22 +143,21 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           echo "$SSH_PUBLIC_KEY" > ~/.ssh/authorized_keys
           chmod 600 ~/.ssh/authorized_keys
-          sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-          sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-          sudo service ssh restart
-          echo "SSH_CONNECTION_STRING=localhost" >> $GITHUB_ENV
+          sudo /usr/sbin/sshd
 
       - name: Display connection information
         run: |
           echo "To connect to the GitHub Actions runner, use the following command:"
-          echo "ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost"
+          echo "ssh -i /path/to/your/private_key runner@$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
           echo "Then, in a new terminal:"
-          echo "kubectl --kubeconfig <(ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost 'cat ~/.kube/config') get pods"
+          echo "kubectl --kubeconfig <(ssh -i /path/to/your/private_key runner@$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4) 'cat ~/.kube/config') get pods"
           echo "Or for k9s:"
-          echo "k9s --kubeconfig <(ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost 'cat ~/.kube/config')"
-
-      - name: Start SSH service
-        run: sudo service ssh start
+          echo "k9s --kubeconfig <(ssh -i /path/to/your/private_key runner@$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4) 'cat ~/.kube/config')"
 
       - name: Keep runner alive
         run: sleep 1h  # Keeps the runner alive for 1 hour for SSH access
+
+      - name: Clean up
+        if: always()
+        run: |
+          kind delete cluster --name test-cluster
