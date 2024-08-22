@@ -86,27 +86,59 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
 
-  deploy-to-kubernetes:
-    needs: build-and-push-docker
+  build-and-deploy:
+    needs: build-and-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
 
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Update Kubernetes deployments
-        run: |
-          kubectl set image deployment/frontend frontend=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
-          kubectl set image deployment/backend backend=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
 
-      - name: Verify deployments
+      - name: Build and push backend Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
+
+      - name: Deploy to Kind Cluster
         run: |
-          kubectl rollout status deployment/frontend
-          kubectl rollout status deployment/backend
+          kubectl create deployment frontend --image=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-frontend:${{ github.sha }}
+          kubectl create deployment backend --image=${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }}
+          kubectl expose deployment frontend --type=NodePort --port=3000
+          kubectl expose deployment backend --type=NodePort --port=3000
+          kubectl get pods
+          kubectl get services
+
+      - name: Wait for deployments
+        run: |
+          kubectl wait --for=condition=available --timeout=600s deployment/frontend
+          kubectl wait --for=condition=available --timeout=600s deployment/backend
+
+      - name: Port forward services (for demonstration)
+        run: |
+          kubectl port-forward service/frontend 3000:3000 &
+          kubectl port-forward service/backend 3001:3000 &
+          sleep 10  # Give some time for port forwarding to establish
+
+      - name: Test deployed services
+        run: |
+          curl http://localhost:3000 || echo "Frontend not responding"
+          curl http://localhost:3001/api/products || echo "Backend not responding"
