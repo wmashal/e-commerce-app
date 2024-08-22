@@ -11,23 +11,46 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v2
+name: CI/CD Pipeline for macOS
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Debug Information
+        run: |
+          pwd
+          ls -R
+          echo "Current Node version: $(node -v)"
+          echo "Current NPM version: $(npm -v)"
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
           node-version: '16'
 
+      - name: Verify Node.js Setup
+        run: |
+          echo "Node version after setup: $(node -v)"
+          echo "NPM version after setup: $(npm -v)"
+
       - name: Cache node modules
         uses: actions/cache@v2
         env:
           cache-name: cache-node-modules
         with:
-          path: ~/Library/Caches/npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+            ${{ runner.os }}-npm-
 
       - name: Install frontend dependencies
         run: |
