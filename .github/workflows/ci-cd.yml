@@ -20,7 +20,9 @@ jobs:
       - name: Get Date
         id: get-date
         run: |
-          echo "date=$(date -u '+%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+          CURRENT_DATE=$(date -u '+%Y-%m-%d')
+          echo "Current date is $CURRENT_DATE"
+          echo "date=$CURRENT_DATE" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Debug Info
@@ -28,7 +30,9 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Runner home: $HOME"
           echo "GitHub workspace: $GITHUB_WORKSPACE"
+          echo "Date output: ${{ steps.get-date.outputs.date }}"
           ls -la
+        shell: bash
 
       - name: Cache node modules
         uses: actions/cache@v2
@@ -43,31 +47,27 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
-          cd frontend
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          cd "$GITHUB_WORKSPACE/frontend" || exit
+          npm ci || npm install
+        shell: bash
 
       - name: Install backend dependencies
         run: |
-          cd backend
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          cd "$GITHUB_WORKSPACE/backend" || exit
+          npm ci || npm install
+        shell: bash
 
       - name: Run frontend tests
         run: |
-          cd frontend
+          cd "$GITHUB_WORKSPACE/frontend" || exit
           npm test -- --passWithNoTests
+        shell: bash
 
       - name: Run backend tests
         run: |
-          cd backend
+          cd "$GITHUB_WORKSPACE/backend" || exit
           npm test
+        shell: bash
 
   build-and-push-docker:
     needs: build-and-test
