@@ -7,15 +7,13 @@ on:
     branches: [ main ]
 
 jobs:
-  build-test-deploy:
+  build-and-test:
     runs-on: ubuntu-latest
     services:
       ssh:
         image: rastasheep/ubuntu-sshd:18.04
         ports:
           - 22
-  build-and-test:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
