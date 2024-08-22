@@ -17,14 +17,21 @@ jobs:
         with:
           node-version: '16'
 
+      - name: Get Date
+        id: get-date
+        run: |
+          echo "::set-output name=date::$(/bin/date -u "+%Y-%m-%d")"
+        shell: bash
+
       - name: Cache node modules
         uses: actions/cache@v2
         env:
           cache-name: cache-node-modules
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') || github.sha }}
+          key: ${{ runner.os }}-npm-${{ steps.get-date.outputs.date }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-npm-${{ steps.get-date.outputs.date }}-
             ${{ runner.os }}-npm-
 
       - name: Install frontend dependencies
