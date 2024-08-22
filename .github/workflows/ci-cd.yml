@@ -7,6 +7,13 @@ on:
     branches: [ main ]
 
 jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    services:
+      ssh:
+        image: rastasheep/ubuntu-sshd:18.04
+        ports:
+          - 22
   build-and-test:
     runs-on: ubuntu-latest
     steps:
@@ -174,16 +181,19 @@ jobs:
           sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
           sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
           sudo service ssh restart
-          echo "SSH_CONNECTION_STRING=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):22" >> $GITHUB_ENV
+          echo "SSH_CONNECTION_STRING=localhost" >> $GITHUB_ENV
 
       - name: Display connection information
         run: |
-          echo "To connect to the Kind cluster, use the following command:"
-          echo "ssh -i /path/to/your/private_key -L 8001:localhost:8001 runner@${{ env.SSH_CONNECTION_STRING }}"
+          echo "To connect to the GitHub Actions runner, use the following command:"
+          echo "ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost"
           echo "Then, in a new terminal:"
-          echo "kubectl --kubeconfig <(ssh -i /path/to/your/private_key runner@${{ env.SSH_CONNECTION_STRING }} 'cat ~/.kube/config') get pods"
+          echo "kubectl --kubeconfig <(ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost 'cat ~/.kube/config') get pods"
           echo "Or for k9s:"
-          echo "k9s --kubeconfig <(ssh -i /path/to/your/private_key runner@${{ env.SSH_CONNECTION_STRING }} 'cat ~/.kube/config')"
+          echo "k9s --kubeconfig <(ssh -i /path/to/your/private_key -p ${{ job.services.ssh.ports[22] }} runner@localhost 'cat ~/.kube/config')"
+
+      - name: Start SSH service
+        run: sudo service ssh start
 
       - name: Keep runner alive
         run: sleep 1h  # Keeps the runner alive for 1 hour for SSH access
