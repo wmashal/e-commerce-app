@@ -20,8 +20,15 @@ jobs:
       - name: Get Date
         id: get-date
         run: |
-          echo "date=$(date -u '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "date=$(date -u '+%Y-%m-%d')" >> "$GITHUB_OUTPUT"
         shell: bash
+
+      - name: Debug Info
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Runner home: $HOME"
+          echo "GitHub workspace: $GITHUB_WORKSPACE"
+          ls -la
 
       - name: Cache node modules
         uses: actions/cache@v2
