@@ -144,6 +144,52 @@ jobs:
           curl http://localhost:3000 || echo "Frontend not responding"
           curl http://localhost:3001/api/products || echo "Backend not responding"
 
+      - name: Set up SSH for Kind cluster access
+        run: |
+          # Generate a new SSH key pair
+          ssh-keygen -t rsa -b 4096 -f ~/.ssh/kind_cluster_key -N ""
+          
+          # Start SSH agent
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/kind_cluster_key
+          
+          # Add public key to authorized_keys
+          cat ~/.ssh/kind_cluster_key.pub >> ~/.ssh/authorized_keys
+          
+          # Configure SSH server (if not already configured)
+          sudo sed -i '' 's/#PermitUserEnvironment no/PermitUserEnvironment yes/' /etc/ssh/sshd_config
+          sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist
+          sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+
+      - name: Get public IP
+        id: ip
+        run: echo "::set-output name=public_ip::$(curl -s https://api.ipify.org)"
+
+      - name: Display connection information
+        run: |
+          echo "To connect to the Kind cluster, use the following steps:"
+          echo "1. Save this private key to your local machine:"
+          cat ~/.ssh/kind_cluster_key
+          echo "2. Set correct permissions: chmod 600 kind_cluster_key"
+          echo "3. SSH to the runner: ssh -i kind_cluster_key ${{ github.actor }}@${{ steps.ip.outputs.public_ip }}"
+          echo "4. Once connected, you can interact with the Kind cluster using kubectl"
+
+      - name: Keep runner alive
+        run: |
+          echo "Runner will stay alive for 1 hour for SSH access"
+          sleep 3600
+
       - name: Clean up
         if: always()
-        run: kind delete cluster --name test-cluster
+        run: |
+          kind delete cluster --name test-cluster
+          rm ~/.ssh/kind_cluster_key*
+          sed -i '' '/kind_cluster_key/d' ~/.ssh/authorized_keys
+
+
+#To use this:
+#
+#  Copy the displayed private key to a file on your local machine (e.g., kind_cluster_key)
+#Set the correct permissions: chmod 600 kind_cluster_key
+#SSH to the runner: ssh -i kind_cluster_key username@ip_address
+#  Once connected, you can interact with the Kind cluster using kubectl
