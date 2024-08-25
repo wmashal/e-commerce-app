@@ -42,18 +42,11 @@ jobs:
     - name: Clear NODE_OPTIONS
       run: unset NODE_OPTIONS
 
-    - name: Cache node modules
-      uses: actions/cache@v2
-      env:
-        cache-name: cache-node-modules
-      with:
-        path: |
-          frontend/node_modules
-          backend/node_modules
-        key: ${{ runner.os }}-npm-${{ steps.date.outputs.date }}-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-npm-${{ steps.date.outputs.date }}-
-          ${{ runner.os }}-npm-
+#    - name: Cache node modules
+#      uses: actions/cache@v2
+#      env:
+#        cache-name: cache-node-modules
+#      with:
 #        path: ~/.npm
 #        key: ${{ runner.os }}-npm-${{ github.run_id }}
 #        restore-keys: |
@@ -87,6 +80,12 @@ jobs:
         cd backend
         npm test
 
+    - name: Force exit to skip cleanup
+      if: always()
+      run: |
+        echo "Force exiting to skip cleanup"
+        kill -9 $$
+
   build-and-push-docker:
     needs: build-and-test
     runs-on: self-hosted
@@ -116,6 +115,11 @@ jobs:
         run: |
           docker buildx build --platform linux/amd64,linux/arm64 -t ${{ secrets.DOCKER_HUB_USERNAME }}/ecommerce-backend:${{ github.sha }} -f backend/Dockerfile backend --push
 
+      - name: Force exit to skip cleanup
+        if: always()
+        run: |
+          echo "Force exiting to skip cleanup"
+          kill -9 $$
   deploy-and-test:
     needs: build-and-push-docker
     runs-on: self-hosted
