@@ -151,35 +151,40 @@ jobs:
           curl http://localhost:3000 || echo "Frontend not responding"
           curl http://localhost:3001/api/products || echo "Backend not responding"
 
-      - name: Set up SSH for Kind cluster access
+      - name: Display username information
         run: |
-          # Generate a new SSH key pair
-          ssh-keygen -t rsa -b 4096 -f ~/.ssh/kind_cluster_key -N ""
-          
-          # Start SSH agent
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/kind_cluster_key
-          
-          # Add public key to authorized_keys
-          cat ~/.ssh/kind_cluster_key.pub >> ~/.ssh/authorized_keys
-          
-          # Configure SSH server (if not already configured)
-          sudo sed -i '' 's/#PermitUserEnvironment no/PermitUserEnvironment yes/' /etc/ssh/sshd_config
-          sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist
-          sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+          echo "macOS user: $USER"
+          echo "Home directory: $HOME"
+          echo "GitHub actor: ${{ github.actor }}"
 
-      - name: Get public IP
-        id: ip
-        run: echo "::set-output name=public_ip::$(curl -s https://api.ipify.org)"
+    - name: Set up SSH for Kind cluster access
+      run: |
+        # Generate a new SSH key pair
+        ssh-keygen -t rsa -b 4096 -f ~/.ssh/kind_cluster_key -N ""
+        
+        # Add public key to authorized_keys
+        cat ~/.ssh/kind_cluster_key.pub >> ~/.ssh/authorized_keys
+        
+        # Configure SSH server (if not already configured)
+        sudo sed -i '' 's/#PermitUserEnvironment no/PermitUserEnvironment yes/' /etc/ssh/sshd_config
+        sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist
+        sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
 
-      - name: Display connection information
-        run: |
-          echo "To connect to the Kind cluster, use the following steps:"
-          echo "1. Save this private key to your local machine:"
-          cat ~/.ssh/kind_cluster_key
-          echo "2. Set correct permissions: chmod 600 kind_cluster_key"
-          echo "3. SSH to the runner: ssh -i kind_cluster_key ${{ github.actor }}@${{ steps.ip.outputs.public_ip }}"
-          echo "4. Once connected, you can interact with the Kind cluster using kubectl"
+    - name: Get IP address
+      id: ip
+      run: |
+        IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n1)
+        echo "::set-output name=ip::$IP"
+        echo "IP Address: $IP"
+
+    - name: Display connection information
+      run: |
+        echo "To connect to the Kind cluster, use the following steps:"
+        echo "1. Save this private key to your local machine:"
+        cat ~/.ssh/kind_cluster_key
+        echo "2. Set correct permissions: chmod 600 kind_cluster_key"
+        echo "3. SSH to the runner: ssh -i kind_cluster_key $USER@${{ steps.ip.outputs.ip }}"
+        echo "4. Once connected, you can interact with the Kind cluster using kubectl"
 
       - name: Keep runner alive
         run: |
